@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QTI Builder — Schoology QTI v2.1 Packager</title>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<style>
+  :root {
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --panel-2: #273449;
+    --border: #334155;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --accent-strong: #0ea5e9;
+    --ok-bg: #052e1a;
+    --ok-border: #15803d;
+    --ok-text: #86efac;
+    --err-bg: #3a0d12;
+    --err-border: #b91c1c;
+    --err-text: #fca5a5;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+  }
+  .wrap {
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 32px 20px 64px;
+  }
+  header h1 {
+    margin: 0 0 4px;
+    font-size: 1.7rem;
+    letter-spacing: -0.02em;
+  }
+  header p {
+    margin: 0 0 24px;
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 22px;
+  }
+  label {
+    display: block;
+    font-weight: 600;
+    font-size: 0.85rem;
+    margin-bottom: 6px;
+    color: var(--text);
+  }
+  .hint { font-weight: 400; color: var(--muted); font-size: 0.8rem; }
+  .field { margin-bottom: 18px; }
+  input[type="text"], textarea, select {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 10px 12px;
+    font-size: 0.95rem;
+    font-family: inherit;
+  }
+  input[type="text"]:focus, textarea:focus, select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(56,189,248,0.25);
+  }
+  textarea {
+    min-height: 320px;
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 0.85rem;
+    line-height: 1.45;
+    resize: vertical;
+    white-space: pre;
+    tab-size: 2;
+  }
+  .mode-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .mode-opt {
+    flex: 1 1 200px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    cursor: pointer;
+    background: var(--panel-2);
+    transition: border-color .15s, background .15s;
+  }
+  .mode-opt:hover { border-color: var(--accent); }
+  .mode-opt input { margin-right: 8px; }
+  .mode-opt.selected { border-color: var(--accent); background: #0b2638; }
+  .mode-opt .t { font-weight: 600; }
+  .mode-opt .d { color: var(--muted); font-size: 0.8rem; margin-top: 2px; }
+  .actions { display: flex; gap: 12px; align-items: center; margin-top: 4px; }
+  button {
+    background: var(--accent-strong);
+    color: #04222f;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 22px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  button:hover { background: var(--accent); }
+  button.secondary {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--border);
+    font-weight: 600;
+  }
+  button.secondary:hover { border-color: var(--accent); background: rgba(56,189,248,0.08); }
+  #status {
+    margin-top: 18px;
+    border-radius: 8px;
+    padding: 14px 16px;
+    font-size: 0.9rem;
+    display: none;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  #status.ok { display: block; background: var(--ok-bg); border: 1px solid var(--ok-border); color: var(--ok-text); }
+  #status.err { display: block; background: var(--err-bg); border: 1px solid var(--err-border); color: var(--err-text); }
+  #status code { background: rgba(255,255,255,0.08); padding: 1px 5px; border-radius: 4px; }
+  footer { margin-top: 28px; color: var(--muted); font-size: 0.8rem; }
+  footer a { color: var(--accent); }
+  details summary { cursor: pointer; color: var(--accent); font-size: 0.85rem; }
+  details { margin-top: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>QTI Builder</h1>
+    <p>Paste a questions payload and download a Schoology-importable QTI v2.1 <code>.zip</code> — all in your browser.</p>
+  </header>
+
+  <div class="card">
+    <div class="field">
+      <label for="title">Title <span class="hint">— used for the assessment name and the zip filename</span></label>
+      <input type="text" id="title" placeholder="My Assessment" autocomplete="off" />
+    </div>
+
+    <div class="field">
+      <label>Mode</label>
+      <div class="mode-row">
+        <label class="mode-opt selected" id="opt-assessment">
+          <input type="radio" name="mode" value="assessment" checked />
+          <span class="t">Assessment</span>
+          <div class="d">Ordered quiz/test — includes assessment_test.xml</div>
+        </label>
+        <label class="mode-opt" id="opt-item_bank">
+          <input type="radio" name="mode" value="item_bank" />
+          <span class="t">Item Bank</span>
+          <div class="d">Question pool — no fixed order</div>
+        </label>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="json">Questions JSON <span class="hint">— the payload from the Gem (may include its own title/mode)</span></label>
+      <textarea id="json" spellcheck="false" placeholder='{ "title": "...", "mode": "assessment", "questions": [ ... ] }'></textarea>
+    </div>
+
+    <div class="actions">
+      <button id="generate">Generate &amp; Download</button>
+      <button class="secondary" id="loadExample" type="button">Load example</button>
+    </div>
+
+    <div id="status"></div>
+
+    <details>
+      <summary>Supported question types &amp; JSON shape</summary>
+      <p class="hint" style="margin-top:10px">
+        <code>multiple_choice</code>, <code>true_false</code>, <code>multiple_select</code>,
+        <code>matching</code>, <code>ordering</code>, <code>fill_blank_text</code>,
+        <code>fill_blank_dropdown</code>, <code>short_answer</code>.
+        Every question may include an optional <code>feedback</code> object with
+        <code>correct</code> / <code>incorrect</code> messages. Stems support inline HTML
+        via <code>prompt</code> (escaped) or <code>prompt_html</code> (raw, multiple choice).
+      </p>
+    </details>
+  </div>
+
+  <footer>
+    Generates QTI v2.1 packages compatible with Schoology &rarr; Resources &rarr; Import &rarr; QTI.
+    Output matches the reference Python generator byte-for-byte (apart from the random IDs).
+  </footer>
+</div>
+
+<a id="downloadAnchor" style="display:none"></a>
+
+<script>
+"use strict";
+
+/* ===========================================================================
+   QTI v2.1 generator — a faithful in-browser port of generate_qti_package.py.
+   The XML templates below are translated one-to-one from the Python script so
+   the output is identical (modulo the random identifiers).
+   =========================================================================== */
+
+// --- Helpers -------------------------------------------------------------
+
+const ID_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
+function randId(length = 6) {
+  let s = "";
+  for (let i = 0; i < length; i++) {
+    s += ID_CHARS[Math.floor(Math.random() * ID_CHARS.length)];
+  }
+  return s;
+}
+
+function makeIdentifier(prefix = "") {
+  return prefix + randId(12);
+}
+
+// Mirrors xml.sax.saxutils.escape (default: &, <, > only — order matters).
+function esc(text) {
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+// Escape for use inside an XML attribute value: &,<,> then quotes.
+function escAttr(text) {
+  return esc(text)
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+// Plain-text title fragment for the assessmentItem title="..." attribute.
+// Escapes &,<,> then quotes, matching prompt_title() in the Python script.
+function promptTitle(q) {
+  const text = (q.prompt != null && q.prompt !== "") ? q.prompt : (q.prompt_html || "");
+  return esc(String(text).slice(0, 60))
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+// Raw prompt_html if present, else XML-escaped prompt.
+function promptBody(q) {
+  if (Object.prototype.hasOwnProperty.call(q, "prompt_html")) return q.prompt_html;
+  return esc(q.prompt != null ? q.prompt : "");
+}
+
+// Filesystem-safe title (matches safe_title() — space, /, \ -> _).
+function safeTitle(title) {
+  return String(title).replace(/ /g, "_").replace(/\//g, "_").replace(/\\/g, "_");
+}
+
+// Download filename: safe_title then strip characters unsafe on common OSes.
+function downloadFilename(title) {
+  let name = safeTitle(title).replace(/[<>:"/\\|?* -]/g, "");
+  name = name.replace(/\s+/g, "_").replace(/_+/g, "_").replace(/^[_.]+|[_.]+$/g, "");
+  return (name || "Assessment") + ".zip";
+}
+
+function pad3(n) {
+  return String(n).padStart(3, "0");
+}
+
+// --- Feedback ------------------------------------------------------------
+
+function buildFeedbackXml(q) {
+  const feedback = q.feedback || {};
+  const correctFb = feedback.correct || "";
+  const incorrectFb = feedback.incorrect || "";
+
+  if (!correctFb && !incorrectFb) {
+    return { outcome_decl: "", response_processing: "", modal_feedback: "", has_feedback: false };
+  }
+
+  const outcomeDecl = '<outcomeDeclaration baseType="identifier" cardinality="single" identifier="FEEDBACKBASIC" />';
+
+  const modalParts = [];
+  if (correctFb) {
+    modalParts.push(
+      '<modalFeedback identifier="CORRECT" outcomeIdentifier="FEEDBACKBASIC" showHide="show">' +
+      "<div>" + esc(correctFb) + "</div>" +
+      "</modalFeedback>"
+    );
+  }
+  if (incorrectFb) {
+    modalParts.push(
+      '<modalFeedback identifier="INCORRECT" outcomeIdentifier="FEEDBACKBASIC" showHide="show">' +
+      "<div>" + esc(incorrectFb) + "</div>" +
+      "</modalFeedback>"
+    );
+  }
+
+  return {
+    outcome_decl: outcomeDecl,
+    response_processing: "",
+    modal_feedback: modalParts.join("\n"),
+    has_feedback: true,
+  };
+}
+
+function buildResponseProcessingWithFeedback(respId = "RESPONSE") {
+  return `<responseProcessing>
+<responseCondition>
+<responseIf>
+<match>
+<variable identifier="${respId}" />
+<correct identifier="${respId}" />
+</match>
+<setOutcomeValue identifier="SCORE"><baseValue baseType="float">1</baseValue></setOutcomeValue>
+<setOutcomeValue identifier="FEEDBACKBASIC"><baseValue baseType="identifier">CORRECT</baseValue></setOutcomeValue>
+</responseIf>
+<responseElse>
+<setOutcomeValue identifier="SCORE"><baseValue baseType="float">0</baseValue></setOutcomeValue>
+<setOutcomeValue identifier="FEEDBACKBASIC"><baseValue baseType="identifier">INCORRECT</baseValue></setOutcomeValue>
+</responseElse>
+</responseCondition>
+</responseProcessing>`;
+}
+
+const ITEM_NS =
+  'xmlns="http://www.imsglobal.org/xsd/imsqti_v2p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqti_v2p1  http://www.imsglobal.org/xsd/qti/qtiv2p1/imsqti_v2p1.xsd"';
+
+const RP_MATCH_CORRECT = '<responseProcessing template="http://www.imsglobal.org/question/qti_v2p1/rptemplates/match_correct" />';
+const RP_MAP_RESPONSE = '<responseProcessing template="http://www.imsglobal.org/question/qti_v2p1/rptemplates/map_response" />';
+
+function choiceIds(n) {
+  const ids = [];
+  for (let i = 0; i < n; i++) ids.push(String.fromCharCode(97 + i)); // 'a', 'b', ...
+  return ids;
+}
+
+// --- Question XML generators (one per type) ------------------------------
+
+function generateMultipleChoice(q, qNum, qId) {
+  const ids = choiceIds(q.choices.length);
+  const correctIdx = q.correct;
+  const fb = buildFeedbackXml(q);
+
+  const choicesXml = q.choices.map((choice, i) =>
+    `<simpleChoice identifier="${ids[i]}">` +
+    `<div> <div> ${esc(choice)} </div> </div>` +
+    `</simpleChoice>`
+  );
+
+  const rp = fb.has_feedback ? buildResponseProcessingWithFeedback() : RP_MATCH_CORRECT;
+  const shuffle = q.shuffle === false ? "false" : "true";
+
+  return `<assessmentItem adaptive="false" identifier="${qId}" timeDependent="false" title="Q${pad3(qNum)} ${promptTitle(q)}" ${ITEM_NS}>
+<responseDeclaration baseType="identifier" cardinality="single" identifier="RESPONSE">
+<correctResponse><value>${ids[correctIdx]}</value></correctResponse>
+</responseDeclaration>
+<outcomeDeclaration baseType="float" cardinality="single" identifier="SCORE" />
+${fb.outcome_decl}
+<itemBody>
+<choiceInteraction maxChoices="1" responseIdentifier="RESPONSE" shuffle="${shuffle}">
+<prompt><div> <div>${promptBody(q)}</div> </div></prompt>
+${choicesXml.join("\n")}
+</choiceInteraction>
+</itemBody>
+${rp}
+${fb.modal_feedback}
+</assessmentItem>`;
+}
+
+function generateTrueFalse(q, qNum, qId) {
+  const correctVal = q.correct ? "true" : "false";
+  const fb = buildFeedbackXml(q);
+  const rp = fb.has_feedback ? buildResponseProcessingWithFeedback() : RP_MATCH_CORRECT;
+
+  return `<assessmentItem adaptive="false" identifier="${qId}" timeDependent="false" title="Q${pad3(qNum)} ${escAttr(String(q.prompt).slice(0, 60))}" ${ITEM_NS}>
+<responseDeclaration baseType="identifier" cardinality="single" identifier="RESPONSE">
+<correctResponse><value>${correctVal}</value></correctResponse>
+</responseDeclaration>
+<outcomeDeclaration baseType="float" cardinality="single" identifier="SCORE" />
+${fb.outcome_decl}
+<itemBody>
+<choiceInteraction maxChoices="1" responseIdentifier="RESPONSE" shuffle="false">
+<prompt><div> <div>${esc(q.prompt)}</div> </div></prompt>
+<simpleChoice identifier="true"><div> <div> True </div> </div></simpleChoice>
+<simpleChoice identifier="false"><div> <div> False </div> </div></simpleChoice>
+</choiceInteraction>
+</itemBody>
+${rp}
+${fb.modal_feedback}
+</assessmentItem>`;
+}
+
+function generateMultipleSelect(q, qNum, qId) {
+  const ids = choiceIds(q.choices.length);
+  const correctIndices = q.correct;
+  const fb = buildFeedbackXml(q);
+
+  const choicesXml = q.choices.map((choice, i) =>
+    `<simpleChoice identifier="${ids[i]}">` +
+    `<div> <div> ${esc(choice)} </div> </div>` +
+    `</simpleChoice>`
+  );
+
+  const correctValues = correctIndices.map(i => `<value>${ids[i]}</value>`).join("\n");
+
+  const mappingEntries = [];
+  for (let i = 0; i < q.choices.length; i++) {
+    if (correctIndices.indexOf(i) !== -1) {
+      mappingEntries.push(`<mapEntry mapKey="${ids[i]}" mappedValue="1" />`);
+    } else {
+      mappingEntries.push(`<mapEntry mapKey="${ids[i]}" mappedValue="-1" />`);
+    }
+  }
+
+  let rp;
+  if (fb.has_feedback) {
+    rp = `<responseProcessing>
+<responseCondition>
+<responseIf>
+<match><variable identifier="RESPONSE" /><correct identifier="RESPONSE" /></match>
+<setOutcomeValue identifier="SCORE"><baseValue baseType="float">1</baseValue></setOutcomeValue>
+<setOutcomeValue identifier="FEEDBACKBASIC"><baseValue baseType="identifier">CORRECT</baseValue></setOutcomeValue>
+</responseIf>
+<responseElse>
+<setOutcomeValue identifier="SCORE"><mapResponse identifier="RESPONSE" /></setOutcomeValue>
+<setOutcomeValue identifier="FEEDBACKBASIC"><baseValue baseType="identifier">INCORRECT</baseValue></setOutcomeValue>
+</responseElse>
+</responseCondition>
+</responseProcessing>`;
+  } else {
+    rp = RP_MAP_RESPONSE;
+  }
+
+  return `<assessmentItem adaptive="false" identifier="${qId}" timeDependent="false" title="Q${pad3(qNum)} ${escAttr(String(q.prompt).slice(0, 60))}" ${ITEM_NS}>
+<responseDeclaration baseType="identifier" cardinality="multiple" identifier="RESPONSE">
+<correctResponse>
+${correctValues}
+</correctResponse>
+<mapping defaultValue="0" lowerBound="0">
+${mappingEntries.join("\n")}
+</mapping>
+</responseDeclaration>
+<outcomeDeclaration baseType="float" cardinality="single" identifier="SCORE" />
+${fb.outcome_decl}
+<itemBody>
+<choiceInteraction maxChoices="${correctIndices.length}" responseIdentifier="RESPONSE" shuffle="true">
+<prompt><div> <div>${esc(q.prompt)}</div> </div></prompt>
+${choicesXml.join("\n")}
+</choiceInteraction>
+</itemBody>
+${rp}
+${fb.modal_feedback}
+</assessmentItem>`;
+}
+
+function generateMatching(q, qNum, qId) {
+  const pairs = q.pairs;
+  const distractors = q.distractors || [];
+  const fb = buildFeedbackXml(q);
+
+  const leftIds = pairs.map((_, i) => `L${i + 1}`);
+  const rightItems = pairs.map(p => p.right).concat(distractors);
+  const rightIds = rightItems.map((_, i) => `R${i + 1}`);
+
+  const correctValues = pairs.map((_, i) => `<value>${leftIds[i]} ${rightIds[i]}</value>`).join("\n");
+
+  const sourceXml = pairs.map((pair, i) =>
+    `<simpleAssociableChoice identifier="${leftIds[i]}" matchMax="1">` +
+    `${esc(pair.left)}` +
+    `</simpleAssociableChoice>`
+  );
+
+  const targetXml = rightItems.map((item, i) =>
+    `<simpleAssociableChoice identifier="${rightIds[i]}" matchMax="1">` +
+    `${esc(item)}` +
+    `</simpleAssociableChoice>`
+  );
+
+  const rp = fb.has_feedback ? buildResponseProcessingWithFeedback() : RP_MATCH_CORRECT;
+
+  return `<assessmentItem adaptive="false" identifier="${qId}" timeDependent="false" title="Q${pad3(qNum)} ${escAttr(String(q.prompt).slice(0, 60))}" ${ITEM_NS}>
+<responseDeclaration baseType="directedPair" cardinality="multiple" identifier="RESPONSE">
+<correctResponse>
+${correctValues}
+</correctResponse>
+</responseDeclaration>
+<outcomeDeclaration baseType="float" cardinality="single" identifier="SCORE" />
+${fb.outcome_decl}
+<itemBody>
+<matchInteraction maxAssociations="${pairs.length}" responseIdentifier="RESPONSE" shuffle="true">
+<prompt><div> <div>${esc(q.prompt)}</div> </div></prompt>
+<simpleMatchSet>
+${sourceXml.join("\n")}
+</simpleMatchSet>
+<simpleMatchSet>
+${targetXml.join("\n")}
+</simpleMatchSet>
+</matchInteraction>
+</itemBody>
+${rp}
+${fb.modal_feedback}
+</assessmentItem>`;
+}
+
+function generateOrdering(q, qNum, qId) {
+  const items = q.items;
+  const itemIds = items.map((_, i) => `O${i + 1}`);
+  const fb = buildFeedbackXml(q);
+
+  const correctValues = items.map((_, i) => `<value>${itemIds[i]}</value>`).join("\n");
+
+  const choicesXml = items.map((item, i) =>
+    `<simpleChoice identifier="${itemIds[i]}">` +
+    `${esc(item)}` +
+    `</simpleChoice>`
+  );
+
+  const rp = fb.has_feedback ? buildResponseProcessingWithFeedback() : RP_MATCH_CORRECT;
+
+  return `<assessmentItem adaptive="false" identifier="${qId}" timeDependent="false" title="Q${pad3(qNum)} ${escAttr(String(q.prompt).slice(0, 60))}" ${ITEM_NS}>
+<responseDeclaration baseType="identifier" cardinality="ordered" identifier="RESPONSE">
+<correctResponse>
+${correctValues}
+</correctResponse>
+</responseDeclaration>
+<outcomeDeclaration baseType="float" cardinality="single" identifier="SCORE" />
+${fb.outcome_decl}
+<itemBody>
+<orderInteraction responseIdentifier="RESPONSE" shuffle="true">
+<prompt><div> <div>${esc(q.prompt)}</div> </div></prompt>
+${choicesXml.join("\n")}
+</orderInteraction>
+</itemBody>
+${rp}
+${fb.modal_feedback}
+</assessmentItem>`;
+}
+
+function generateFillBlankText(q, qNum, qId) {
+  const blanks = q.blanks;
+  const template = q.prompt_template;
+  const fb = buildFeedbackXml(q);
+
+  const responseDecls = blanks.map((blank, i) => {
+    const respId = `RESPONSE_${i + 1}`;
+    const correctVals = blank.accepted_answers.map(a => `<value>${esc(a)}</value>`).join("\n");
+    return `<responseDeclaration baseType="string" cardinality="single" identifier="${respId}">\n` +
+           `<correctResponse>\n${correctVals}\n</correctResponse>\n` +
+           `</responseDeclaration>`;
+  });
+
+  const parts = template.split("____");
+  let bodyHtml = "";
+  for (let i = 0; i < parts.length; i++) {
+    bodyHtml += esc(parts[i]);
+    if (i < blanks.length) {
+      const respId = `RESPONSE_${i + 1}`;
+      bodyHtml += `<textEntryInteraction responseIdentifier="${respId}" expectedLength="20" />`;
+    }
+  }
+
+  const rp = fb.has_feedback ? buildResponseProcessingWithFeedback("RESPONSE_1") : RP_MATCH_CORRECT;
+
+  return `<assessmentItem adaptive="false" identifier="${qId}" timeDependent="false" title="Q${pad3(qNum)} ${escAttr(String(q.prompt_template).slice(0, 60))}" ${ITEM_NS}>
+${responseDecls.join("\n")}
+<outcomeDeclaration baseType="float" cardinality="single" identifier="SCORE" />
+${fb.outcome_decl}
+<itemBody>
+<div>
+<div>${bodyHtml}</div>
+</div>
+</itemBody>
+${rp}
+${fb.modal_feedback}
+</assessmentItem>`;
+}
+
+function generateFillBlankDropdown(q, qNum, qId) {
+  const blanks = q.blanks;
+  const template = q.prompt_template;
+  const fb = buildFeedbackXml(q);
+
+  const responseDecls = blanks.map((blank, i) => {
+    const respId = `RESPONSE_${i + 1}`;
+    const cids = blank.choices.map((_, j) => `c${i + 1}_${j + 1}`);
+    const correctId = cids[blank.correct];
+    return `<responseDeclaration baseType="identifier" cardinality="single" identifier="${respId}">\n` +
+           `<correctResponse><value>${correctId}</value></correctResponse>\n` +
+           `</responseDeclaration>`;
+  });
+
+  const parts = template.split("____");
+  let bodyHtml = "";
+  for (let i = 0; i < parts.length; i++) {
+    bodyHtml += esc(parts[i]);
+    if (i < blanks.length) {
+      const respId = `RESPONSE_${i + 1}`;
+      const cids = blanks[i].choices.map((_, j) => `c${i + 1}_${j + 1}`);
+      const inlineChoices = blanks[i].choices
+        .map((c, j) => `<inlineChoice identifier="${cids[j]}">${esc(c)}</inlineChoice>`)
+        .join("\n");
+      bodyHtml +=
+        `<inlineChoiceInteraction responseIdentifier="${respId}" shuffle="true">\n` +
+        `${inlineChoices}\n` +
+        `</inlineChoiceInteraction>`;
+    }
+  }
+
+  const rp = fb.has_feedback ? buildResponseProcessingWithFeedback("RESPONSE_1") : RP_MATCH_CORRECT;
+
+  return `<assessmentItem adaptive="false" identifier="${qId}" timeDependent="false" title="Q${pad3(qNum)} ${escAttr(String(q.prompt_template).slice(0, 60))}" ${ITEM_NS}>
+${responseDecls.join("\n")}
+<outcomeDeclaration baseType="float" cardinality="single" identifier="SCORE" />
+${fb.outcome_decl}
+<itemBody>
+<div>
+<div>${bodyHtml}</div>
+</div>
+</itemBody>
+${rp}
+${fb.modal_feedback}
+</assessmentItem>`;
+}
+
+function generateShortAnswer(q, qNum, qId) {
+  const length = q.expected_length || "paragraph";
+  const linesMap = { sentence: 3, paragraph: 8, essay: 15 };
+  const expectedLines = Object.prototype.hasOwnProperty.call(linesMap, length) ? linesMap[length] : 8;
+  const fb = buildFeedbackXml(q);
+
+  return `<assessmentItem adaptive="false" identifier="${qId}" timeDependent="false" title="Q${pad3(qNum)} ${escAttr(String(q.prompt).slice(0, 60))}" ${ITEM_NS}>
+<responseDeclaration baseType="string" cardinality="single" identifier="RESPONSE" />
+<outcomeDeclaration baseType="float" cardinality="single" identifier="SCORE" />
+${fb.outcome_decl}
+<itemBody>
+<extendedTextInteraction responseIdentifier="RESPONSE" expectedLines="${expectedLines}">
+<prompt><div> <div>${esc(q.prompt)}</div> </div></prompt>
+</extendedTextInteraction>
+</itemBody>
+${fb.modal_feedback}
+</assessmentItem>`;
+}
+
+const GENERATORS = {
+  multiple_choice: generateMultipleChoice,
+  true_false: generateTrueFalse,
+  multiple_select: generateMultipleSelect,
+  matching: generateMatching,
+  ordering: generateOrdering,
+  fill_blank_text: generateFillBlankText,
+  fill_blank_dropdown: generateFillBlankDropdown,
+  short_answer: generateShortAnswer,
+};
+
+// --- Package generators (manifest + assessment test) ---------------------
+
+function generateManifest(title, mode, itemsInfo) {
+  const manifestId = makeIdentifier("MANIFEST-");
+  const resourceEntries = [];
+
+  if (mode === "assessment") {
+    const testResId = makeIdentifier("RES-");
+    resourceEntries.push(
+      `\t\t<resource href="assessment_test.xml" identifier="${testResId}" type="imsqti_test_xmlv2p1">\n` +
+      `\t\t\t<metadata/>\n` +
+      `\t\t\t<file href="assessment_test.xml"/>\n` +
+      `\t\t</resource>`
+    );
+  }
+
+  for (const item of itemsInfo) {
+    const resId = makeIdentifier("RES-");
+    resourceEntries.push(
+      `\t\t<resource href="items/${item.filename}" identifier="${resId}" type="imsqti_item_xmlv2p1">\n` +
+      `\t\t\t<metadata/>\n` +
+      `\t\t\t<file href="items/${item.filename}"/>\n` +
+      `\t\t</resource>`
+    );
+  }
+
+  const resourcesXml = resourceEntries.join("\n");
+
+  return `<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/imscp_v1p1" xmlns:imsmd="http://www.imsglobal.org/xsd/imsmd_v1p2" xmlns:imsqti="http://www.imsglobal.org/xsd/imsqti_metadata_v2p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" identifier="${manifestId}" xsi:schemaLocation="http://www.imsglobal.org/xsd/imscp_v1p1 http://www.imsglobal.org/xsd/imscp_v1p1.xsd http://www.imsglobal.org/xsd/imsmd_v1p2 http://www.imsglobal.org/xsd/imsmd_v1p2p4.xsd http://www.imsglobal.org/xsd/imsqti_metadata_v2p1 http://www.imsglobal.org/xsd/qti/qtiv2p1/imsqti_metadata_v2p1.xsd">
+\t<metadata>
+\t\t<schema>QTIv2.1 Package</schema>
+\t\t<schemaversion>1.0.0</schemaversion>
+\t\t<imsmd:lom>
+\t\t\t<imsmd:general>
+\t\t\t\t<imsmd:identifier>${esc(safeTitle(title))}</imsmd:identifier>
+\t\t\t\t<imsmd:title>
+\t\t\t\t\t<imsmd:langstring xml:lang="en">${esc(title)}</imsmd:langstring>
+\t\t\t\t</imsmd:title>
+\t\t\t\t<imsmd:language>en</imsmd:language>
+\t\t\t\t<imsmd:description>
+\t\t\t\t\t<imsmd:langstring xml:lang="en"/>
+\t\t\t\t</imsmd:description>
+\t\t\t</imsmd:general>
+\t\t\t<imsmd:lifecycle>
+\t\t\t\t<imsmd:version>
+\t\t\t\t\t<imsmd:langstring xml:lang="en">2.1</imsmd:langstring>
+\t\t\t\t</imsmd:version>
+\t\t\t\t<imsmd:status>
+\t\t\t\t\t<imsmd:source>
+\t\t\t\t\t\t<imsmd:langstring xml:lang="en">LOMv1.0</imsmd:langstring>
+\t\t\t\t\t</imsmd:source>
+\t\t\t\t\t<imsmd:value>
+\t\t\t\t\t\t<imsmd:langstring xml:lang="x-none">Final</imsmd:langstring>
+\t\t\t\t\t</imsmd:value>
+\t\t\t\t</imsmd:status>
+\t\t\t</imsmd:lifecycle>
+\t\t\t<imsmd:metametadata>
+\t\t\t\t<imsmd:metadatascheme>LOMv1.0</imsmd:metadatascheme>
+\t\t\t\t<imsmd:metadatascheme>QTIv2.1</imsmd:metadatascheme>
+\t\t\t\t<imsmd:language>en</imsmd:language>
+\t\t\t</imsmd:metametadata>
+\t\t\t<imsmd:technical>
+\t\t\t\t<imsmd:format>text/x-imsqti-item-xml</imsmd:format>
+\t\t\t</imsmd:technical>
+\t\t</imsmd:lom>
+\t</metadata>
+\t<organizations/>
+\t<resources>
+${resourcesXml}
+\t</resources>
+</manifest>`;
+}
+
+function generateAssessmentTest(title, itemsInfo) {
+  const testId = makeIdentifier("");
+  const partId = makeIdentifier("");
+  const sectionId = makeIdentifier("");
+
+  const itemRefs = itemsInfo
+    .map(item => `\t\t\t<assessmentItemRef href="items/${item.filename}" identifier="${item.q_id}"/>`)
+    .join("\n");
+
+  return `<?xml version="1.0" encoding="utf-8"?>
+<assessmentTest xmlns="http://www.imsglobal.org/xsd/imsqti_v2p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" identifier="${testId}" title="${escAttr(title)}" xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqti_v2p1 http://www.imsglobal.org/xsd/qti/qtiv2p1/imsqti_v2p1.xsd">
+\t<testPart identifier="${partId}" navigationMode="linear" submissionMode="individual">
+\t\t<assessmentSection identifier="${sectionId}" title="${escAttr(title)}" visible="true">
+${itemRefs}
+\t\t</assessmentSection>
+\t</testPart>
+</assessmentTest>`;
+}
+
+// --- Validation ----------------------------------------------------------
+
+function validateQuestion(q, n) {
+  const where = `Question ${n}`;
+  if (typeof q !== "object" || q === null || Array.isArray(q)) {
+    throw new Error(`${where}: must be a JSON object.`);
+  }
+  const type = q.type;
+  if (!type) throw new Error(`${where}: missing "type".`);
+  if (!Object.prototype.hasOwnProperty.call(GENERATORS, type)) {
+    throw new Error(`${where}: unknown type "${type}". Supported: ${Object.keys(GENERATORS).join(", ")}.`);
+  }
+
+  switch (type) {
+    case "multiple_choice":
+      if (!Array.isArray(q.choices) || q.choices.length < 1)
+        throw new Error(`${where} (multiple_choice): needs a "choices" array.`);
+      if (typeof q.correct !== "number" || q.correct < 0 || q.correct >= q.choices.length)
+        throw new Error(`${where} (multiple_choice): "correct" must be a valid 0-based index into choices.`);
+      break;
+    case "true_false":
+      if (typeof q.correct !== "boolean")
+        throw new Error(`${where} (true_false): "correct" must be true or false.`);
+      if (q.prompt == null) throw new Error(`${where} (true_false): missing "prompt".`);
+      break;
+    case "multiple_select":
+      if (!Array.isArray(q.choices) || q.choices.length < 1)
+        throw new Error(`${where} (multiple_select): needs a "choices" array.`);
+      if (!Array.isArray(q.correct) || q.correct.length < 1)
+        throw new Error(`${where} (multiple_select): "correct" must be a non-empty array of indices.`);
+      for (const idx of q.correct) {
+        if (typeof idx !== "number" || idx < 0 || idx >= q.choices.length)
+          throw new Error(`${where} (multiple_select): correct index ${idx} is out of range.`);
+      }
+      break;
+    case "matching":
+      if (!Array.isArray(q.pairs) || q.pairs.length < 1)
+        throw new Error(`${where} (matching): needs a "pairs" array.`);
+      for (const p of q.pairs) {
+        if (p == null || p.left == null || p.right == null)
+          throw new Error(`${where} (matching): each pair needs "left" and "right".`);
+      }
+      if (q.distractors != null && !Array.isArray(q.distractors))
+        throw new Error(`${where} (matching): "distractors" must be an array if provided.`);
+      break;
+    case "ordering":
+      if (!Array.isArray(q.items) || q.items.length < 1)
+        throw new Error(`${where} (ordering): needs an "items" array.`);
+      break;
+    case "fill_blank_text":
+      if (q.prompt_template == null) throw new Error(`${where} (fill_blank_text): missing "prompt_template".`);
+      if (!Array.isArray(q.blanks) || q.blanks.length < 1)
+        throw new Error(`${where} (fill_blank_text): needs a "blanks" array.`);
+      for (const b of q.blanks) {
+        if (b == null || !Array.isArray(b.accepted_answers) || b.accepted_answers.length < 1)
+          throw new Error(`${where} (fill_blank_text): each blank needs "accepted_answers".`);
+      }
+      break;
+    case "fill_blank_dropdown":
+      if (q.prompt_template == null) throw new Error(`${where} (fill_blank_dropdown): missing "prompt_template".`);
+      if (!Array.isArray(q.blanks) || q.blanks.length < 1)
+        throw new Error(`${where} (fill_blank_dropdown): needs a "blanks" array.`);
+      for (const b of q.blanks) {
+        if (b == null || !Array.isArray(b.choices) || b.choices.length < 1)
+          throw new Error(`${where} (fill_blank_dropdown): each blank needs a "choices" array.`);
+        if (typeof b.correct !== "number" || b.correct < 0 || b.correct >= b.choices.length)
+          throw new Error(`${where} (fill_blank_dropdown): each blank needs a valid "correct" index.`);
+      }
+      break;
+    case "short_answer":
+      if (q.prompt == null) throw new Error(`${where} (short_answer): missing "prompt".`);
+      break;
+  }
+}
+
+// --- Build + download ----------------------------------------------------
+
+async function buildPackage(title, mode, questions) {
+  const itemsInfo = [];
+  for (let i = 0; i < questions.length; i++) {
+    const qNum = i + 1;
+    const q = questions[i];
+    validateQuestion(q, qNum);
+    const qId = `Q${pad3(qNum)}_${randId()}`;
+    const xml = GENERATORS[q.type](q, qNum, qId);
+    itemsInfo.push({ q_id: qId, filename: `${qId}.xml`, xml: xml });
+  }
+
+  const manifestXml = generateManifest(title, mode, itemsInfo);
+  const assessmentTestXml = mode === "assessment" ? generateAssessmentTest(title, itemsInfo) : null;
+
+  const zip = new JSZip();
+  zip.file("imsmanifest.xml", manifestXml);
+  if (assessmentTestXml) zip.file("assessment_test.xml", assessmentTestXml);
+  for (const item of itemsInfo) {
+    zip.file(`items/${item.filename}`, item.xml);
+  }
+
+  const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+  return { blob, count: itemsInfo.length };
+}
+
+function showStatus(kind, html) {
+  const el = document.getElementById("status");
+  el.className = kind;
+  el.innerHTML = html;
+}
+
+function triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.getElementById("downloadAnchor");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+// --- UI wiring -----------------------------------------------------------
+
+document.querySelectorAll('input[name="mode"]').forEach(radio => {
+  radio.addEventListener("change", () => {
+    document.querySelectorAll(".mode-opt").forEach(opt => opt.classList.remove("selected"));
+    const checked = document.querySelector('input[name="mode"]:checked').value;
+    document.getElementById("opt-" + checked).classList.add("selected");
+  });
+});
+
+document.getElementById("generate").addEventListener("click", async () => {
+  const titleInput = document.getElementById("title").value.trim();
+  const uiMode = document.querySelector('input[name="mode"]:checked').value;
+  const raw = document.getElementById("json").value.trim();
+
+  if (!raw) {
+    showStatus("err", "Paste a questions JSON payload first.");
+    return;
+  }
+
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch (e) {
+    showStatus("err", "Invalid JSON: " + esc(e.message));
+    return;
+  }
+
+  // Accept either a full payload {title, mode, questions} or a bare array of questions.
+  let questions, jsonTitle, jsonMode;
+  if (Array.isArray(data)) {
+    questions = data;
+  } else if (data && typeof data === "object") {
+    questions = data.questions;
+    jsonTitle = data.title;
+    jsonMode = data.mode;
+  } else {
+    showStatus("err", "JSON must be an object with a \"questions\" array (or a bare array of questions).");
+    return;
+  }
+
+  if (!Array.isArray(questions) || questions.length === 0) {
+    showStatus("err", "No questions found. The payload needs a non-empty \"questions\" array.");
+    return;
+  }
+
+  // Title: UI input wins, else JSON title, else "Assessment".
+  const title = titleInput || jsonTitle || "Assessment";
+
+  // Mode: UI selector wins. (A mode in the JSON is allowed but the selector is authoritative.)
+  const mode = uiMode;
+  if (mode !== "assessment" && mode !== "item_bank") {
+    showStatus("err", "Mode must be 'assessment' or 'item_bank'.");
+    return;
+  }
+
+  let result;
+  try {
+    result = await buildPackage(title, mode, questions);
+  } catch (e) {
+    showStatus("err", "Could not build package:\n" + esc(e.message));
+    return;
+  }
+
+  const filename = downloadFilename(title);
+  triggerDownload(result.blob, filename);
+
+  const modeLabel = mode === "assessment" ? "Assessment (includes assessment_test.xml)" : "Item Bank (no assessment_test.xml)";
+  showStatus(
+    "ok",
+    `Built <strong>${esc(filename)}</strong> — downloading now.\n` +
+    `${result.count} question${result.count === 1 ? "" : "s"} · Mode: ${esc(modeLabel)} · Title: <code>${esc(title)}</code>\n\n` +
+    `Import in Schoology: Resources → Import → QTI → QTI 2.1 → upload the zip.`
+  );
+});
+
+// Example payload — exercises every supported question type.
+const EXAMPLE = {
+  title: "Sample QTI Assessment",
+  mode: "assessment",
+  questions: [
+    {
+      type: "multiple_choice",
+      prompt: "What is the capital of France?",
+      choices: ["London", "Paris", "Berlin", "Madrid"],
+      correct: 1,
+      feedback: {
+        correct: "Correct! Paris has been the capital of France since the 10th century.",
+        incorrect: "The capital of France is Paris."
+      }
+    },
+    {
+      type: "true_false",
+      prompt: "The Earth is the third planet from the Sun.",
+      correct: true,
+      feedback: { correct: "Right — Mercury, Venus, then Earth.", incorrect: "Earth is third: Mercury, Venus, Earth." }
+    },
+    {
+      type: "multiple_select",
+      prompt: "Which of the following are prime numbers?",
+      choices: ["2", "4", "7", "9", "11"],
+      correct: [0, 2, 4],
+      feedback: { correct: "Correct — 2, 7, and 11 are prime.", incorrect: "Primes here are 2, 7, and 11." }
+    },
+    {
+      type: "matching",
+      prompt: "Match each country to its capital.",
+      pairs: [
+        { left: "France", right: "Paris" },
+        { left: "Germany", right: "Berlin" },
+        { left: "Spain", right: "Madrid" },
+        { left: "Italy", right: "Rome" }
+      ],
+      distractors: ["Oslo", "Vienna"]
+    },
+    {
+      type: "ordering",
+      prompt: "Arrange these planets from closest to farthest from the Sun.",
+      items: ["Mercury", "Venus", "Earth", "Mars"]
+    },
+    {
+      type: "fill_blank_text",
+      prompt_template: "The chemical symbol for water is ____.",
+      blanks: [ { accepted_answers: ["H2O", "h2o"] } ],
+      feedback: { correct: "Yes — two hydrogen, one oxygen.", incorrect: "It's H2O." }
+    },
+    {
+      type: "fill_blank_dropdown",
+      prompt_template: "Water boils at ____ degrees Celsius at sea level.",
+      blanks: [ { choices: ["50", "100", "150", "200"], correct: 1 } ]
+    },
+    {
+      type: "short_answer",
+      prompt: "Explain how photosynthesis works in your own words.",
+      expected_length: "paragraph",
+      feedback: { correct: "A strong answer mentions sunlight, CO2, water, and glucose." }
+    }
+  ]
+};
+
+document.getElementById("loadExample").addEventListener("click", () => {
+  document.getElementById("title").value = EXAMPLE.title;
+  document.querySelector('input[name="mode"][value="assessment"]').checked = true;
+  document.querySelectorAll(".mode-opt").forEach(opt => opt.classList.remove("selected"));
+  document.getElementById("opt-assessment").classList.add("selected");
+  document.getElementById("json").value = JSON.stringify(EXAMPLE, null, 2);
+  showStatus("ok", "Loaded an 8-question example covering every question type. Click <strong>Generate &amp; Download</strong>.");
+});
+</script>
+</body>
+</html>
