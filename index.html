@@ -214,6 +214,22 @@
    the output is identical (modulo the random identifiers).
    =========================================================================== */
 
+// Register error surfacing FIRST so any failure — including one caused by a
+// browser extension injecting into the page — is shown on screen, never silent.
+window.addEventListener("error", function (e) {
+  try {
+    showStatus("err", "Script error: " + esc(e.message || String(e)) +
+      "\n(If you're on a school/managed device, a browser extension may be " +
+      "interfering — try a private/incognito window.)");
+  } catch (_) {}
+});
+window.addEventListener("unhandledrejection", function (e) {
+  try {
+    var m = (e.reason && e.reason.message) ? e.reason.message : String(e.reason);
+    showStatus("err", "Error: " + esc(m));
+  } catch (_) {}
+});
+
 // --- Helpers -------------------------------------------------------------
 
 const ID_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -883,6 +899,9 @@ document.querySelectorAll('input[name="mode"]').forEach(radio => {
 });
 
 document.getElementById("generate").addEventListener("click", async () => {
+  // Instant acknowledgement: if you click and DON'T see this, the click isn't
+  // reaching the page's JavaScript at all (e.g. an extension is blocking it).
+  showStatus("ok", "Working…");
   const titleInput = document.getElementById("title").value.trim();
   const uiMode = document.querySelector('input[name="mode"]:checked').value;
   const raw = document.getElementById("json").value.trim();
@@ -937,15 +956,31 @@ document.getElementById("generate").addEventListener("click", async () => {
   }
 
   const filename = downloadFilename(title);
-  triggerDownload(result.blob, filename);
+  let downloadOk = true;
+  try {
+    triggerDownload(result.blob, filename);
+  } catch (e) {
+    downloadOk = false;
+  }
 
   const modeLabel = mode === "assessment" ? "Assessment (includes assessment_test.xml)" : "Item Bank (no assessment_test.xml)";
-  showStatus(
-    "ok",
-    `Built <strong>${esc(filename)}</strong> — downloading now.\n` +
-    `${result.count} question${result.count === 1 ? "" : "s"} · Mode: ${esc(modeLabel)} · Title: <code>${esc(title)}</code>\n\n` +
-    `Import in Schoology: Resources → Import → QTI → QTI 2.1 → upload the zip.`
-  );
+  const built = `Built <strong>${esc(filename)}</strong> — ${result.count} question${result.count === 1 ? "" : "s"} · Mode: ${esc(modeLabel)} · Title: <code>${esc(title)}</code>`;
+  if (downloadOk) {
+    showStatus(
+      "ok",
+      `${built}\nThe download should be starting now.\n\n` +
+      `Import in Schoology: Resources → Import → QTI → QTI 2.1 → upload the zip.`
+    );
+  } else {
+    // The package built fine but the browser/extension blocked the auto-download.
+    // Offer a manual download link as a fallback.
+    const url = URL.createObjectURL(result.blob);
+    showStatus(
+      "ok",
+      `${built}\nThe automatic download was blocked (often a managed-device extension). ` +
+      `Use this link instead: <a href="${url}" download="${esc(filename)}">Download ${esc(filename)}</a>`
+    );
+  }
 });
 
 // Example payload — exercises every supported question type.
@@ -1019,17 +1054,6 @@ document.getElementById("loadExample").addEventListener("click", () => {
   document.getElementById("opt-assessment").classList.add("selected");
   document.getElementById("json").value = JSON.stringify(EXAMPLE, null, 2);
   showStatus("ok", "Loaded an 8-question example covering every question type. Click <strong>Generate &amp; Download</strong>.");
-});
-
-// --- Safety net: surface any error instead of failing silently ----------
-
-window.addEventListener("error", e => {
-  showStatus("err", "Unexpected script error: " + esc(e.message || String(e)) +
-    "\nTry a hard refresh (Cmd/Ctrl+Shift+R). If it persists, copy this message.");
-});
-window.addEventListener("unhandledrejection", e => {
-  const m = (e.reason && e.reason.message) ? e.reason.message : String(e.reason);
-  showStatus("err", "Unexpected error: " + esc(m));
 });
 
 // If the zip library couldn't load (e.g. a network filter blocked it), say so
