@@ -21,7 +21,13 @@ no build step, no install.
 ## Supported question types
 
 `multiple_choice`, `true_false`, `multiple_select`, `matching`, `ordering`,
-`fill_blank_text`, `fill_blank_dropdown`, `short_answer`.
+`fill_blank_text`, `fill_blank_dropdown`, `short_answer`, `highlight_image`.
+
+`highlight_image` imports as a Schoology **Highlight Image** question (QTI
+`drawingInteraction`): the student gets a drawing canvas to show their work —
+useful for math — and it's teacher-graded. The page generates and bundles the
+canvas image itself, so you don't upload anything. Optional fields: `width`,
+`height`, and `background` (`"white"` or `"grid"`).
 
 Every question may include an optional `feedback` object with `correct` /
 `incorrect` messages, rendered via QTI `modalFeedback`. Click **Load example**

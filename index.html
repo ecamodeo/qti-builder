@@ -189,10 +189,14 @@
       <p class="hint" style="margin-top:10px">
         <code>multiple_choice</code>, <code>true_false</code>, <code>multiple_select</code>,
         <code>matching</code>, <code>ordering</code>, <code>fill_blank_text</code>,
-        <code>fill_blank_dropdown</code>, <code>short_answer</code>.
+        <code>fill_blank_dropdown</code>, <code>short_answer</code>,
+        <code>highlight_image</code>.
         Every question may include an optional <code>feedback</code> object with
         <code>correct</code> / <code>incorrect</code> messages. Stems support inline HTML
         via <code>prompt</code> (escaped) or <code>prompt_html</code> (raw, multiple choice).
+        <code>highlight_image</code> gives the student a drawing canvas to show work
+        (teacher-graded); optional <code>width</code>, <code>height</code>, and
+        <code>background</code> (<code>"white"</code> or <code>"grid"</code>).
       </p>
     </details>
   </div>
@@ -299,6 +303,48 @@ function downloadFilename(title) {
 
 function pad3(n) {
   return String(n).padStart(3, "0");
+}
+
+// --- Canvas / image helpers (for highlight_image / drawing questions) ----
+
+// Resolve the canvas settings for a highlight_image question.
+function canvasParams(q) {
+  const c = q.canvas || {};
+  let width = Math.round(Number(c.width) || Number(q.width) || 800);
+  let height = Math.round(Number(c.height) || Number(q.height) || 500);
+  width = Math.max(50, Math.min(2000, width || 800));
+  height = Math.max(50, Math.min(2000, height || 500));
+  const background = (c.background || q.background || "white");
+  return { width, height, background };
+}
+
+// Decode a data: URI (or bare base64) into a Uint8Array.
+function dataUriToBytes(dataUri) {
+  const s = String(dataUri);
+  const comma = s.indexOf(",");
+  const b64 = comma >= 0 ? s.slice(comma + 1) : s;
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+// Generate the PNG bytes for a blank (or grid) drawing canvas.
+function makeCanvasPngBytes(width, height, background) {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, width, height);
+  if (background === "grid") {
+    ctx.strokeStyle = "#dddddd";
+    ctx.lineWidth = 1;
+    const step = 25;
+    for (let x = step; x < width; x += step) { ctx.beginPath(); ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, height); ctx.stroke(); }
+    for (let y = step; y < height; y += step) { ctx.beginPath(); ctx.moveTo(0, y + 0.5); ctx.lineTo(width, y + 0.5); ctx.stroke(); }
+  }
+  return dataUriToBytes(canvas.toDataURL("image/png"));
 }
 
 // --- Feedback ------------------------------------------------------------
@@ -676,6 +722,26 @@ ${fb.modal_feedback}
 </assessmentItem>`;
 }
 
+// Highlight Image (Schoology) = QTI drawingInteraction: the student marks up an
+// image canvas with a drawing tool; the response is the image file (teacher-graded).
+// The canvas image itself is bundled into the package by buildPackage().
+function generateHighlightImage(q, qNum, qId) {
+  // Manually graded (file response), so no responseProcessing/modalFeedback — this
+  // matches the exact structure confirmed to import as a Schoology "Highlight Image".
+  const { width, height } = canvasParams(q);
+  const titleText = q.prompt != null ? String(q.prompt) : "";
+  return `<assessmentItem adaptive="false" identifier="${qId}" timeDependent="false" title="Q${pad3(qNum)} ${escAttr(titleText.slice(0, 60))}" ${ITEM_NS}>
+<responseDeclaration baseType="file" cardinality="single" identifier="RESPONSE" />
+<outcomeDeclaration baseType="float" cardinality="single" identifier="SCORE" />
+<itemBody>
+<drawingInteraction responseIdentifier="RESPONSE">
+<prompt><div> <div>${promptBody(q)}</div> </div></prompt>
+<object data="images/${qId}.png" height="${height}" type="image/png" width="${width}">canvas</object>
+</drawingInteraction>
+</itemBody>
+</assessmentItem>`;
+}
+
 const GENERATORS = {
   multiple_choice: generateMultipleChoice,
   true_false: generateTrueFalse,
@@ -685,7 +751,12 @@ const GENERATORS = {
   fill_blank_text: generateFillBlankText,
   fill_blank_dropdown: generateFillBlankDropdown,
   short_answer: generateShortAnswer,
+  highlight_image: generateHighlightImage,
+  drawing: generateHighlightImage,
 };
+
+// Question types that bundle a generated canvas image into the package.
+const CANVAS_TYPES = { highlight_image: true, drawing: true };
 
 // --- Package generators (manifest + assessment test) ---------------------
 
@@ -705,10 +776,12 @@ function generateManifest(title, mode, itemsInfo) {
 
   for (const item of itemsInfo) {
     const resId = makeIdentifier("RES-");
+    let fileEntries = `\t\t\t<file href="items/${item.filename}"/>\n`;
+    if (item.imageHref) fileEntries += `\t\t\t<file href="${item.imageHref}"/>\n`;
     resourceEntries.push(
       `\t\t<resource href="items/${item.filename}" identifier="${resId}" type="imsqti_item_xmlv2p1">\n` +
       `\t\t\t<metadata/>\n` +
-      `\t\t\t<file href="items/${item.filename}"/>\n` +
+      fileEntries +
       `\t\t</resource>`
     );
   }
@@ -852,6 +925,11 @@ function validateQuestion(q, n) {
     case "short_answer":
       if (q.prompt == null) throw new Error(`${where} (short_answer): missing "prompt".`);
       break;
+    case "highlight_image":
+    case "drawing":
+      if (q.prompt == null && q.prompt_html == null)
+        throw new Error(`${where} (highlight_image): missing "prompt".`);
+      break;
   }
 }
 
@@ -865,7 +943,13 @@ async function buildPackage(title, mode, questions) {
     validateQuestion(q, qNum);
     const qId = `Q${pad3(qNum)}_${randId()}`;
     const xml = GENERATORS[q.type](q, qNum, qId);
-    itemsInfo.push({ q_id: qId, filename: `${qId}.xml`, xml: xml });
+    const entry = { q_id: qId, filename: `${qId}.xml`, xml: xml };
+    if (CANVAS_TYPES[q.type]) {
+      const cp = canvasParams(q);
+      entry.imageHref = `items/images/${qId}.png`;
+      entry.imageBytes = makeCanvasPngBytes(cp.width, cp.height, cp.background);
+    }
+    itemsInfo.push(entry);
   }
 
   const manifestXml = generateManifest(title, mode, itemsInfo);
@@ -876,6 +960,9 @@ async function buildPackage(title, mode, questions) {
   if (assessmentTestXml) zip.file("assessment_test.xml", assessmentTestXml);
   for (const item of itemsInfo) {
     zip.file(`items/${item.filename}`, item.xml);
+    if (item.imageHref && item.imageBytes) {
+      zip.file(item.imageHref, item.imageBytes);
+    }
   }
 
   const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
@@ -1060,6 +1147,13 @@ const EXAMPLE = {
       prompt: "Explain how photosynthesis works in your own words.",
       expected_length: "paragraph",
       feedback: { correct: "A strong answer mentions sunlight, CO2, water, and glucose." }
+    },
+    {
+      type: "highlight_image",
+      prompt: "Solve 3x + 5 = 20. Show all your work on the canvas and circle your final answer.",
+      background: "grid",
+      width: 800,
+      height: 500
     }
   ]
 };
