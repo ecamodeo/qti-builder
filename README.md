@@ -29,6 +29,24 @@ useful for math — and it's teacher-graded. The page generates and bundles the
 canvas image itself, so you don't upload anything. Optional fields: `width`,
 `height`, and `background` (`"white"` or `"grid"`).
 
+## Math notation (LaTeX → MathML)
+
+Write LaTeX inside `$…$` (inline) or `$$…$$` (display) in any prompt, answer
+choice, or feedback message. The page converts it to MathML (via
+[Temml](https://temml.org), bundled locally), which Schoology renders. Schoology
+does **not** render LaTeX delimiters or `\(…\)` on import — only MathML — so the
+conversion happens at build time.
+
+Two rules when writing the JSON:
+
+- **Double every backslash**: JSON treats `\` as an escape, so write `\\frac`,
+  `\\sqrt`, `\\theta` — not `\frac`. A single backslash will corrupt or break the
+  JSON.
+- **Literal dollar signs**: use `\$` (e.g. `\$5.00`) so it isn't read as a math
+  delimiter.
+
+Example: `"prompt": "Solve $x^2 + 3x - 10 = 0$ where $x > 0$."`
+
 Every question may include an optional `feedback` object with `correct` /
 `incorrect` messages, rendered via QTI `modalFeedback`. Click **Load example**
 in the page for a payload exercising all eight types.

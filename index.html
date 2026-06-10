@@ -12,6 +12,14 @@
     document.write('<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"><\/script>');
   }
 </script>
+<!-- Temml converts LaTeX ($...$) to MathML, which Schoology renders. Bundled
+     locally; CDN fallback. -->
+<script src="temml.min.js"></script>
+<script>
+  if (typeof temml === "undefined") {
+    document.write('<script src="https://cdn.jsdelivr.net/npm/temml@0.10.30/dist/temml.min.js"><\/script>');
+  }
+</script>
 <style>
   :root {
     --bg: #0f172a;
@@ -197,6 +205,10 @@
         <code>highlight_image</code> gives the student a drawing canvas to show work
         (teacher-graded); optional <code>width</code>, <code>height</code>, and
         <code>background</code> (<code>"white"</code> or <code>"grid"</code>).
+        <strong>Math:</strong> write LaTeX in <code>$…$</code> (inline) or
+        <code>$$…$$</code> (display) inside prompts, choices, and feedback — it's
+        converted to MathML that Schoology renders. In JSON, double every backslash
+        (<code>\\frac</code>, not <code>\frac</code>); use <code>\$</code> for a literal dollar sign.
       </p>
     </details>
   </div>
@@ -265,6 +277,55 @@ function escAttr(text) {
     .replace(/'/g, "&apos;");
 }
 
+// --- Math (LaTeX $...$ / $$...$$  ->  MathML, which Schoology renders) ----
+
+// Convert one LaTeX string to a MathML string via Temml. Returns null on any
+// failure (missing lib / parse error) so callers can fall back to literal text.
+// Temml omits the namespace and adds CSS hooks; we normalize the <math> tag so
+// the result is valid standalone XML for the QTI package.
+function latexToMathml(latex, display) {
+  if (typeof temml === "undefined" || !temml.renderToString) return null;
+  let m;
+  try {
+    m = temml.renderToString(String(latex), { displayMode: !!display, throwOnError: false });
+  } catch (e) {
+    return null;
+  }
+  if (typeof m !== "string" || m.indexOf("<math") !== 0) return null;
+  return m.replace(/^<math[^>]*>/, display
+    ? '<math xmlns="http://www.w3.org/1998/Math/MathML" display="block">'
+    : '<math xmlns="http://www.w3.org/1998/Math/MathML">');
+}
+
+// Turn a text string into XML body content: spans wrapped in $...$ (inline) or
+// $$...$$ (display) become embedded MathML; everything else is XML-escaped.
+// Use \$ for a literal dollar sign. With no "$" present this returns esc(text)
+// exactly, so all non-math content stays byte-for-byte identical to before.
+function mathToXml(text) {
+  const s = String(text);
+  if (s.indexOf("$") === -1) return esc(s);
+  let out = "", i = 0;
+  while (i < s.length) {
+    if (s[i] === "\\" && s[i + 1] === "$") { out += "$"; i += 2; continue; }
+    if (s[i] === "$") {
+      const display = s[i + 1] === "$";
+      const delim = display ? "$$" : "$";
+      const start = i + delim.length;
+      const end = s.indexOf(delim, start);
+      if (end === -1) { out += esc("$"); i += 1; continue; }
+      const mml = latexToMathml(s.slice(start, end), display);
+      out += (mml === null) ? esc(s.slice(i, end + delim.length)) : mml;
+      i = end + delim.length;
+      continue;
+    }
+    let j = i;
+    while (j < s.length && s[j] !== "$" && !(s[j] === "\\" && s[j + 1] === "$")) j++;
+    out += esc(s.slice(i, j));
+    i = j;
+  }
+  return out;
+}
+
 // Plain-text title fragment for the assessmentItem title="..." attribute.
 // Escapes &,<,> then quotes, matching prompt_title() in the Python script.
 function promptTitle(q) {
@@ -274,10 +335,10 @@ function promptTitle(q) {
     .replace(/'/g, "&apos;");
 }
 
-// Raw prompt_html if present, else XML-escaped prompt.
+// Raw prompt_html if present, else prompt text with math ($...$) rendered.
 function promptBody(q) {
   if (Object.prototype.hasOwnProperty.call(q, "prompt_html")) return q.prompt_html;
-  return esc(q.prompt != null ? q.prompt : "");
+  return mathToXml(q.prompt != null ? q.prompt : "");
 }
 
 // Filesystem-safe title (matches safe_title() — space, /, \ -> _).
@@ -364,14 +425,14 @@ function buildFeedbackXml(q) {
   if (correctFb) {
     modalParts.push(
       '<modalFeedback identifier="CORRECT" outcomeIdentifier="FEEDBACKBASIC" showHide="show">' +
-      "<div>" + esc(correctFb) + "</div>" +
+      "<div>" + mathToXml(correctFb) + "</div>" +
       "</modalFeedback>"
     );
   }
   if (incorrectFb) {
     modalParts.push(
       '<modalFeedback identifier="INCORRECT" outcomeIdentifier="FEEDBACKBASIC" showHide="show">' +
-      "<div>" + esc(incorrectFb) + "</div>" +
+      "<div>" + mathToXml(incorrectFb) + "</div>" +
       "</modalFeedback>"
     );
   }
@@ -424,7 +485,7 @@ function generateMultipleChoice(q, qNum, qId) {
 
   const choicesXml = q.choices.map((choice, i) =>
     `<simpleChoice identifier="${ids[i]}">` +
-    `<div> <div> ${esc(choice)} </div> </div>` +
+    `<div> <div> ${mathToXml(choice)} </div> </div>` +
     `</simpleChoice>`
   );
 
@@ -461,7 +522,7 @@ function generateTrueFalse(q, qNum, qId) {
 ${fb.outcome_decl}
 <itemBody>
 <choiceInteraction maxChoices="1" responseIdentifier="RESPONSE" shuffle="false">
-<prompt><div> <div>${esc(q.prompt)}</div> </div></prompt>
+<prompt><div> <div>${mathToXml(q.prompt)}</div> </div></prompt>
 <simpleChoice identifier="true"><div> <div> True </div> </div></simpleChoice>
 <simpleChoice identifier="false"><div> <div> False </div> </div></simpleChoice>
 </choiceInteraction>
@@ -478,7 +539,7 @@ function generateMultipleSelect(q, qNum, qId) {
 
   const choicesXml = q.choices.map((choice, i) =>
     `<simpleChoice identifier="${ids[i]}">` +
-    `<div> <div> ${esc(choice)} </div> </div>` +
+    `<div> <div> ${mathToXml(choice)} </div> </div>` +
     `</simpleChoice>`
   );
 
@@ -525,7 +586,7 @@ ${mappingEntries.join("\n")}
 ${fb.outcome_decl}
 <itemBody>
 <choiceInteraction maxChoices="${correctIndices.length}" responseIdentifier="RESPONSE" shuffle="true">
-<prompt><div> <div>${esc(q.prompt)}</div> </div></prompt>
+<prompt><div> <div>${mathToXml(q.prompt)}</div> </div></prompt>
 ${choicesXml.join("\n")}
 </choiceInteraction>
 </itemBody>
@@ -569,7 +630,7 @@ ${correctValues}
 ${fb.outcome_decl}
 <itemBody>
 <matchInteraction maxAssociations="${pairs.length}" responseIdentifier="RESPONSE" shuffle="true">
-<prompt><div> <div>${esc(q.prompt)}</div> </div></prompt>
+<prompt><div> <div>${mathToXml(q.prompt)}</div> </div></prompt>
 <simpleMatchSet>
 ${sourceXml.join("\n")}
 </simpleMatchSet>
@@ -608,7 +669,7 @@ ${correctValues}
 ${fb.outcome_decl}
 <itemBody>
 <orderInteraction responseIdentifier="RESPONSE" shuffle="true">
-<prompt><div> <div>${esc(q.prompt)}</div> </div></prompt>
+<prompt><div> <div>${mathToXml(q.prompt)}</div> </div></prompt>
 ${choicesXml.join("\n")}
 </orderInteraction>
 </itemBody>
@@ -633,7 +694,7 @@ function generateFillBlankText(q, qNum, qId) {
   const parts = template.split("____");
   let bodyHtml = "";
   for (let i = 0; i < parts.length; i++) {
-    bodyHtml += esc(parts[i]);
+    bodyHtml += mathToXml(parts[i]);
     if (i < blanks.length) {
       const respId = `RESPONSE_${i + 1}`;
       bodyHtml += `<textEntryInteraction responseIdentifier="${respId}" expectedLength="20" />`;
@@ -673,7 +734,7 @@ function generateFillBlankDropdown(q, qNum, qId) {
   const parts = template.split("____");
   let bodyHtml = "";
   for (let i = 0; i < parts.length; i++) {
-    bodyHtml += esc(parts[i]);
+    bodyHtml += mathToXml(parts[i]);
     if (i < blanks.length) {
       const respId = `RESPONSE_${i + 1}`;
       const cids = blanks[i].choices.map((_, j) => `c${i + 1}_${j + 1}`);
@@ -715,7 +776,7 @@ function generateShortAnswer(q, qNum, qId) {
 ${fb.outcome_decl}
 <itemBody>
 <extendedTextInteraction responseIdentifier="RESPONSE" expectedLines="${expectedLines}">
-<prompt><div> <div>${esc(q.prompt)}</div> </div></prompt>
+<prompt><div> <div>${mathToXml(q.prompt)}</div> </div></prompt>
 </extendedTextInteraction>
 </itemBody>
 ${fb.modal_feedback}
@@ -1174,6 +1235,11 @@ if (typeof JSZip === "undefined") {
     "The zip library (JSZip) failed to load, so packages can't be built on this " +
     "network. This usually means a content filter blocked it. Try a different " +
     "network, or let the site owner know so they can bundle the library locally.");
+} else if (typeof temml === "undefined") {
+  showStatus("err",
+    "The math library (Temml) failed to load. Packages will still build, but " +
+    "LaTeX math ($...$) will appear as literal text instead of rendered notation. " +
+    "This usually means a content filter blocked it.");
 }
 </script>
 </body>
