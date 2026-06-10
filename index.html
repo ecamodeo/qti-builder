@@ -924,7 +924,15 @@ document.getElementById("generate").addEventListener("click", async () => {
   try {
     data = JSON.parse(raw);
   } catch (e) {
-    showStatus("err", "Invalid JSON: " + esc(e.message));
+    const msg = String((e && e.message) || e);
+    let hint = "";
+    if (/unterminated|unexpected end|end of (json|data|input)|after json/i.test(msg)) {
+      hint = "\n\nThis usually means the JSON was cut off before it finished — the tool " +
+        "that generated it (e.g. a chatbot) may have truncated a long response. The text " +
+        "should end with a closing  ]  then  } . For very large quizzes, generate the " +
+        "questions in smaller batches and combine them.";
+    }
+    showStatus("err", "Invalid JSON: " + esc(msg) + hint);
     return;
   }
 
