@@ -283,9 +283,18 @@ function safeTitle(title) {
 
 // Download filename: safe_title then strip characters unsafe on common OSes.
 function downloadFilename(title) {
-  let name = safeTitle(title).replace(/[<>:"/\\|?* -]/g, "");
-  name = name.replace(/\s+/g, "_").replace(/_+/g, "_").replace(/^[_.]+|[_.]+$/g, "");
-  return (name || "Assessment") + ".zip";
+  // Whitelist filename-safe characters (no regex character ranges, so a stray
+  // byte can never turn this into an invalid pattern). Collapse/trim separators.
+  var safe = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-";
+  var src = safeTitle(title);
+  var out = "";
+  for (var i = 0; i < src.length; i++) {
+    if (safe.indexOf(src.charAt(i)) !== -1) out += src.charAt(i);
+  }
+  out = out.split("_").filter(Boolean).join("_");
+  while (out && (out.charAt(0) === "." || out.charAt(0) === "_")) out = out.slice(1);
+  while (out && (out.slice(-1) === "." || out.slice(-1) === "_")) out = out.slice(0, -1);
+  return (out || "Assessment") + ".zip";
 }
 
 function pad3(n) {
