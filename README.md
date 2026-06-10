@@ -53,8 +53,10 @@ page's own inputs when set, falling back to the values in the JSON.
 
 ## Implementation notes
 
-- Vanilla JS, no framework. [JSZip](https://stuk.github.io/jszip/) (via CDN)
-  builds the zip; download is triggered with a Blob URL.
+- Vanilla JS, no framework. [JSZip](https://stuk.github.io/jszip/) builds the
+  zip; it's bundled locally (`jszip.min.js`, same origin as the page) so it works
+  even on networks that block external CDNs, with a CDN fallback. Download is
+  triggered with a Blob URL.
 - The XML output is a faithful port of a reference Python generator, so the
   packages match what that script produces (apart from the random identifiers
   QTI requires).

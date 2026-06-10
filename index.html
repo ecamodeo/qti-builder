@@ -4,7 +4,14 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>QTI Builder — Schoology QTI v2.1 Packager</title>
-<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<!-- JSZip is bundled locally (same origin as this page) so it works even when
+     external CDNs are blocked, e.g. on school networks. CDN is a fallback. -->
+<script src="jszip.min.js"></script>
+<script>
+  if (typeof JSZip === "undefined") {
+    document.write('<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"><\/script>');
+  }
+</script>
 <style>
   :root {
     --bg: #0f172a;
@@ -1013,6 +1020,26 @@ document.getElementById("loadExample").addEventListener("click", () => {
   document.getElementById("json").value = JSON.stringify(EXAMPLE, null, 2);
   showStatus("ok", "Loaded an 8-question example covering every question type. Click <strong>Generate &amp; Download</strong>.");
 });
+
+// --- Safety net: surface any error instead of failing silently ----------
+
+window.addEventListener("error", e => {
+  showStatus("err", "Unexpected script error: " + esc(e.message || String(e)) +
+    "\nTry a hard refresh (Cmd/Ctrl+Shift+R). If it persists, copy this message.");
+});
+window.addEventListener("unhandledrejection", e => {
+  const m = (e.reason && e.reason.message) ? e.reason.message : String(e.reason);
+  showStatus("err", "Unexpected error: " + esc(m));
+});
+
+// If the zip library couldn't load (e.g. a network filter blocked it), say so
+// clearly rather than letting the button appear to "do nothing".
+if (typeof JSZip === "undefined") {
+  showStatus("err",
+    "The zip library (JSZip) failed to load, so packages can't be built on this " +
+    "network. This usually means a content filter blocked it. Try a different " +
+    "network, or let the site owner know so they can bundle the library locally.");
+}
 </script>
 </body>
 </html>
