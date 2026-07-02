@@ -206,8 +206,9 @@
         (teacher-graded); optional <code>width</code>, <code>height</code>, and
         <code>background</code> (<code>"white"</code> or <code>"grid"</code>).
         <strong>Math:</strong> write LaTeX in <code>$…$</code> (inline) or
-        <code>$$…$$</code> (display) inside prompts, choices, and feedback — it's
-        converted to MathML that Schoology renders. In JSON, double every backslash
+        <code>$$…$$</code> (display) in any question text — prompts, choices,
+        matching/ordering items, dropdown options, and feedback — it's converted to
+        MathML that Schoology renders. In JSON, double every backslash
         (<code>\\frac</code>, not <code>\frac</code>); use <code>\$</code> for a literal dollar sign.
       </p>
     </details>
@@ -608,13 +609,13 @@ function generateMatching(q, qNum, qId) {
 
   const sourceXml = pairs.map((pair, i) =>
     `<simpleAssociableChoice identifier="${leftIds[i]}" matchMax="1">` +
-    `${esc(pair.left)}` +
+    `${mathToXml(pair.left)}` +
     `</simpleAssociableChoice>`
   );
 
   const targetXml = rightItems.map((item, i) =>
     `<simpleAssociableChoice identifier="${rightIds[i]}" matchMax="1">` +
-    `${esc(item)}` +
+    `${mathToXml(item)}` +
     `</simpleAssociableChoice>`
   );
 
@@ -653,7 +654,7 @@ function generateOrdering(q, qNum, qId) {
 
   const choicesXml = items.map((item, i) =>
     `<simpleChoice identifier="${itemIds[i]}">` +
-    `${esc(item)}` +
+    `${mathToXml(item)}` +
     `</simpleChoice>`
   );
 
@@ -739,7 +740,7 @@ function generateFillBlankDropdown(q, qNum, qId) {
       const respId = `RESPONSE_${i + 1}`;
       const cids = blanks[i].choices.map((_, j) => `c${i + 1}_${j + 1}`);
       const inlineChoices = blanks[i].choices
-        .map((c, j) => `<inlineChoice identifier="${cids[j]}">${esc(c)}</inlineChoice>`)
+        .map((c, j) => `<inlineChoice identifier="${cids[j]}">${mathToXml(c)}</inlineChoice>`)
         .join("\n");
       bodyHtml +=
         `<inlineChoiceInteraction responseIdentifier="${respId}" shuffle="true">\n` +

@@ -31,8 +31,9 @@ canvas image itself, so you don't upload anything. Optional fields: `width`,
 
 ## Math notation (LaTeX → MathML)
 
-Write LaTeX inside `$…$` (inline) or `$$…$$` (display) in any prompt, answer
-choice, or feedback message. The page converts it to MathML (via
+Write LaTeX inside `$…$` (inline) or `$$…$$` (display) in any question text —
+prompts, answer choices, matching/ordering items, dropdown options, and feedback.
+The page converts it to MathML (via
 [Temml](https://temml.org), bundled locally), which Schoology renders. Schoology
 does **not** render LaTeX delimiters or `\(…\)` on import — only MathML — so the
 conversion happens at build time.
