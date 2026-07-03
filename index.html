@@ -917,6 +917,26 @@ ${itemRefs}
 
 // --- Validation ----------------------------------------------------------
 
+// Different AI tools emit slightly different field names for the same thing.
+// Normalize the common variants to the canonical schema so a payload doesn't
+// fail just because it said "answer" instead of "correct". Only fills a
+// canonical field when it's actually missing — never overrides one you gave.
+function normalizeQuestion(orig) {
+  if (typeof orig !== "object" || orig === null || Array.isArray(orig)) return orig;
+  const q = Object.assign({}, orig);
+  if (q.prompt == null && q.question != null) q.prompt = q.question;
+  if (q.prompt_template == null && q.template != null) q.prompt_template = q.template;
+  if (q.choices == null && Array.isArray(q.options)) q.choices = q.options;
+  if (q.correct == null && q.answer != null) q.correct = q.answer;
+  if (q.correct == null && q.answers != null) q.correct = q.answers;
+  if (q.feedback == null && (q.correct_feedback != null || q.incorrect_feedback != null)) {
+    q.feedback = {};
+    if (q.correct_feedback != null) q.feedback.correct = q.correct_feedback;
+    if (q.incorrect_feedback != null) q.feedback.incorrect = q.incorrect_feedback;
+  }
+  return q;
+}
+
 function validateQuestion(q, n) {
   const where = `Question ${n}`;
   if (typeof q !== "object" || q === null || Array.isArray(q)) {
@@ -932,8 +952,8 @@ function validateQuestion(q, n) {
     case "multiple_choice":
       if (!Array.isArray(q.choices) || q.choices.length < 1)
         throw new Error(`${where} (multiple_choice): needs a "choices" array.`);
-      if (typeof q.correct !== "number" || q.correct < 0 || q.correct >= q.choices.length)
-        throw new Error(`${where} (multiple_choice): "correct" must be a valid 0-based index into choices.`);
+      if (typeof q.correct !== "number" || !Number.isInteger(q.correct) || q.correct < 0 || q.correct >= q.choices.length)
+        throw new Error(`${where} (multiple_choice): "correct" is ${JSON.stringify(q.correct)}, but must be a whole number from 0 to ${q.choices.length - 1} — the POSITION of the right choice (0 = first), not the answer's value.`);
       break;
     case "true_false":
       if (typeof q.correct !== "boolean")
@@ -1001,7 +1021,7 @@ async function buildPackage(title, mode, questions) {
   const itemsInfo = [];
   for (let i = 0; i < questions.length; i++) {
     const qNum = i + 1;
-    const q = questions[i];
+    const q = normalizeQuestion(questions[i]);
     validateQuestion(q, qNum);
     const qId = `Q${pad3(qNum)}_${randId()}`;
     const xml = GENERATORS[q.type](q, qNum, qId);
