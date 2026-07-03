@@ -921,6 +921,31 @@ ${itemRefs}
 // Normalize the common variants to the canonical schema so a payload doesn't
 // fail just because it said "answer" instead of "correct". Only fills a
 // canonical field when it's actually missing — never overrides one you gave.
+// Turn a loosely-specified "correct" into a 0-based index into choices.
+// Accepts: a valid index; the choice's value (number or string); a letter
+// (A/B/C…). Returns the original value untouched if it can't be resolved, so
+// validation still reports a clear error.
+function resolveChoiceIndex(correct, choices) {
+  const n = choices.length;
+  if (typeof correct === "number" && Number.isInteger(correct) && correct >= 0 && correct < n) return correct;
+  const s = String(correct).trim();
+  let i = choices.findIndex(c => String(c).trim() === s);
+  if (i < 0) i = choices.findIndex(c => String(c).trim().toLowerCase() === s.toLowerCase());
+  if (i >= 0) return i;
+  // Value after an "=" (e.g. "x = 5" -> match the choice "5").
+  if (s.indexOf("=") >= 0) {
+    const rhs = s.slice(s.lastIndexOf("=") + 1).trim();
+    let k = choices.findIndex(c => String(c).trim() === rhs);
+    if (k < 0) k = choices.findIndex(c => String(c).trim().toLowerCase() === rhs.toLowerCase());
+    if (k >= 0) return k;
+  }
+  if (/^[A-Za-z]$/.test(s)) {
+    const idx = s.toUpperCase().charCodeAt(0) - 65; // A->0, B->1, ...
+    if (idx >= 0 && idx < n) return idx;
+  }
+  return correct;
+}
+
 function normalizeQuestion(orig) {
   if (typeof orig !== "object" || orig === null || Array.isArray(orig)) return orig;
   const q = Object.assign({}, orig);
@@ -933,6 +958,20 @@ function normalizeQuestion(orig) {
     q.feedback = {};
     if (q.correct_feedback != null) q.feedback.correct = q.correct_feedback;
     if (q.incorrect_feedback != null) q.feedback.incorrect = q.incorrect_feedback;
+  }
+  // Resolve answer-by-value / answer-by-letter into a proper index.
+  if (Array.isArray(q.choices)) {
+    if (q.type === "multiple_choice" && q.correct != null) {
+      q.correct = resolveChoiceIndex(q.correct, q.choices);
+    } else if (q.type === "multiple_select" && Array.isArray(q.correct)) {
+      q.correct = q.correct.map(c => resolveChoiceIndex(c, q.choices));
+    }
+  }
+  if (q.type === "fill_blank_dropdown" && Array.isArray(q.blanks)) {
+    q.blanks = q.blanks.map(b =>
+      (b && Array.isArray(b.choices) && b.correct != null)
+        ? Object.assign({}, b, { correct: resolveChoiceIndex(b.correct, b.choices) })
+        : b);
   }
   return q;
 }
